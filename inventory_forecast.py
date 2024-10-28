@@ -66,6 +66,14 @@ for category, group in data.groupby("品类"):
 
     plt.figure(figsize=PLOT_CONFIG["figure_size"])
     plt.plot(train_data.index, train_data["库存量"].values, label="历史库存量")
+
+    connection_dates = [train_data.index[-1], adjusted_forecast_series.index[0]]
+    connection_values = [
+        train_data["库存量"].values[-1],
+        adjusted_forecast_series.values[0],
+    ]
+    plt.plot(connection_dates, connection_values, "k-", linewidth=1)
+
     plt.plot(
         adjusted_forecast_series.index,
         adjusted_forecast_series.values,
