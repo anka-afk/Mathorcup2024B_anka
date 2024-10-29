@@ -57,5 +57,21 @@ sales_pivoted[high_missing_categories] = sales_pivoted[high_missing_categories].
     sales_pivoted[high_missing_categories].rolling(window=7, min_periods=1).mean()
 )
 
+# 进一步填补残余缺失值
+
+# 再次进行线性插值尝试填补
+sales_pivoted = sales_pivoted.interpolate(method="linear", limit_direction="both")
+
+# 对于仍然未填补的缺失值，使用高级品类的均值填补
+for category in sales_pivoted.columns[sales_pivoted.isnull().any()]:
+    high_category = category_info.loc[
+        category_info["品类"] == category, "高级品类"
+    ].values[0]
+    related_categories = category_info[category_info["高级品类"] == high_category][
+        "品类"
+    ]
+    related_data = sales_pivoted[related_categories].mean(axis=1)
+    sales_pivoted[category].fillna(related_data, inplace=True)
+
 # 输出结果文件
 sales_pivoted.to_csv("填补完缺失值的销量数据.csv", encoding="gbk")
