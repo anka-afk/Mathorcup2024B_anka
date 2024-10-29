@@ -10,10 +10,18 @@ sales_data["日期"] = pd.to_datetime(sales_data["日期"], format="%Y/%m/%d")
 # 合并数据
 sales_data_with_info = pd.merge(sales_data, category_info, how="left", on="品类")
 
+# 过滤出22年7月到9月和23年4月到6月的数据
+filtered_data = sales_data_with_info[
+    (sales_data_with_info["日期"].dt.year == 2022)
+    & (sales_data_with_info["日期"].dt.month >= 7)
+    & (sales_data_with_info["日期"].dt.month <= 9)
+    | (sales_data_with_info["日期"].dt.year == 2023)
+    & (sales_data_with_info["日期"].dt.month >= 4)
+    & (sales_data_with_info["日期"].dt.month <= 6)
+]
+
 # 创建数据透视表以便计算缺失情况和填补
-sales_pivoted = sales_data_with_info.pivot_table(
-    index="日期", columns="品类", values="销量"
-)
+sales_pivoted = filtered_data.pivot_table(index="日期", columns="品类", values="销量")
 
 # 计算缺失值情况
 missing_counts = sales_pivoted.isnull().sum()
