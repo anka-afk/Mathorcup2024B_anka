@@ -8,9 +8,11 @@ PARAMS = {
     "smoothing_level": 0.8,  # 指数平滑级别系数
     "smoothing_trend": 0.5,  # 趋势平滑系数
     "alpha": 0.6,  # 历史数据与预测值的加权系数
-    "train_period": ("2023-01", "2023-06"),  # 训练数据期间
-    "last_year_period": ("2022-07", "2022-09"),  # 去年同期数据
+    "window_size": 6,  # 滚动窗口大小（月）
     "forecast_months": 3,  # 预测未来月数
+    "step_size": 1,  # 每次滚动的步长（月）
+    "last_year_period": ("2022-07", "2022-09"),  # 去年同期数据
+    "train_period": ("2023-01", "2023-06"),  # 训练数据期间
 }
 
 # 图表配置
@@ -28,6 +30,8 @@ forecast_results = {}
 
 for category, group in data.groupby("品类"):
     group = group.resample("MS").sum()
+
+    # 获取去年同期和训练数据
     last_year = group.loc[
         f"{PARAMS['last_year_period'][0]}" :f"{PARAMS['last_year_period'][1]}"
     ]
@@ -35,6 +39,7 @@ for category, group in data.groupby("品类"):
         f"{PARAMS['train_period'][0]}" :f"{PARAMS['train_period'][1]}"
     ]
 
+    # 预测未来3个月
     model = ExponentialSmoothing(
         train_data["库存量"],
         trend="add",
@@ -45,9 +50,13 @@ for category, group in data.groupby("品类"):
     model_fit = model.fit(
         smoothing_level=PARAMS["smoothing_level"],
         smoothing_trend=PARAMS["smoothing_trend"],
+        optimized=True,
     )
+
+    # 直接预测未来3个月
     forecast = model_fit.forecast(PARAMS["forecast_months"])
 
+    # 确保去年同期数据和预测数据长度相同
     adjusted_forecast = (
         PARAMS["alpha"] * last_year["库存量"].values
         + (1 - PARAMS["alpha"]) * forecast.values
