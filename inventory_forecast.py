@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 # 可调节参数配置
 PARAMS = {
+    "initial_alpha": 0.2,  # 初始历史数据与预测值的加权系数
     "window_size": 6,  # 滚动窗口大小（月）
     "forecast_months": 3,  # 预测未来月数
     "step_size": 1,  # 每次滚动的步长（月）
