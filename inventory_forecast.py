@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 
 # 可调节参数配置
 PARAMS = {
-    "smoothing_level": 0.8,  # 指数平滑级别系数
-    "smoothing_trend": 0.5,  # 趋势平滑系数
-    "alpha": 0.6,  # 历史数据与预测值的加权系数
     "window_size": 6,  # 滚动窗口大小（月）
     "forecast_months": 3,  # 预测未来月数
     "step_size": 1,  # 每次滚动的步长（月）
@@ -28,38 +25,97 @@ data = data.sort_index()
 
 forecast_results = {}
 
+
+def find_best_params(train_data, initial_params=None):
+    """自动搜索最优参数"""
+    if initial_params is None:
+        initial_params = {
+            "smoothing_level": [0.1, 0.3, 0.5, 0.7, 0.9],
+            "smoothing_trend": [0.1, 0.3, 0.5, 0.7, 0.9],
+            "damping_trend": [0.8, 0.9, 0.98],  # 添加阻尼因子
+        }
+
+    best_aic = float("inf")
+    best_params = {}
+
+    for level in initial_params["smoothing_level"]:
+        for trend in initial_params["smoothing_trend"]:
+            for damp in initial_params["damping_trend"]:
+                try:
+                    model = ExponentialSmoothing(
+                        train_data,
+                        trend="add",
+                        damped_trend=True,
+                        initialization_method="estimated",
+                    )
+                    fit = model.fit(
+                        smoothing_level=level,
+                        smoothing_trend=trend,
+                        damping_trend=damp,
+                        optimized=False,
+                    )
+                    if fit.aic < best_aic:
+                        best_aic = fit.aic
+                        best_params = {
+                            "smoothing_level": level,
+                            "smoothing_trend": trend,
+                            "damping_trend": damp,
+                        }
+                except:
+                    continue
+
+    return best_params
+
+
+def adaptive_alpha(last_year_values, forecast_values):
+    """根据去年同期和预测值的差异调整alpha"""
+    diff_ratio = np.abs(last_year_values - forecast_values) / (last_year_values + 1e-5)
+    dynamic_alpha = np.clip(PARAMS["initial_alpha"] + 0.5 * diff_ratio.mean(), 0, 1)
+    return dynamic_alpha
+
+
 for category, group in data.groupby("品类"):
     group = group.resample("MS").sum()
 
-    # 获取去年同期和训练数据
+    # 获取去年同期数据
     last_year = group.loc[
         f"{PARAMS['last_year_period'][0]}" :f"{PARAMS['last_year_period'][1]}"
     ]
+
+    # 获取训练数据
     train_data = group.loc[
         f"{PARAMS['train_period'][0]}" :f"{PARAMS['train_period'][1]}"
     ]
+    train_values = train_data["库存量"]
 
-    # 预测未来3个月
+    # 获取最优参数
+    best_params = find_best_params(train_values)
+
+    # 使用最优参数训练模型
     model = ExponentialSmoothing(
-        train_data["库存量"],
+        train_values,
         trend="add",
         seasonal=None,
         damped_trend=True,
         initialization_method="estimated",
     )
+
     model_fit = model.fit(
-        smoothing_level=PARAMS["smoothing_level"],
-        smoothing_trend=PARAMS["smoothing_trend"],
-        optimized=True,
+        smoothing_level=best_params["smoothing_level"],
+        smoothing_trend=best_params["smoothing_trend"],
+        damping_trend=best_params["damping_trend"],
+        optimized=False,
     )
 
-    # 直接预测未来3个月
     forecast = model_fit.forecast(PARAMS["forecast_months"])
 
-    # 确保去年同期数据和预测数据长度相同
+    # 计算自适应alpha值
+    adaptive_alpha_value = adaptive_alpha(last_year["库存量"].values, forecast.values)
+
+    # 调整预测值
     adjusted_forecast = (
-        PARAMS["alpha"] * last_year["库存量"].values
-        + (1 - PARAMS["alpha"]) * forecast.values
+        adaptive_alpha_value * last_year["库存量"].values
+        + (1 - adaptive_alpha_value) * forecast.values
     )
 
     forecast_dates = pd.to_datetime(["2023-07-01", "2023-08-01", "2023-09-01"])
@@ -74,11 +130,11 @@ for category, group in data.groupby("品类"):
     print(adjusted_forecast_series)
 
     plt.figure(figsize=PLOT_CONFIG["figure_size"])
-    plt.plot(train_data.index, train_data["库存量"].values, label="历史库存量")
+    plt.plot(train_data.index, train_data["库存量"], label="历史库存量")
 
     connection_dates = [train_data.index[-1], adjusted_forecast_series.index[0]]
     connection_values = [
-        train_data["库存量"].values[-1],
+        train_data["库存量"].iloc[-1],
         adjusted_forecast_series.values[0],
     ]
     plt.plot(connection_dates, connection_values, "k-", linewidth=1)
