@@ -1,22 +1,15 @@
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import numpy as np
-import matplotlib.pyplot as plt
 
 # 可调节参数配置
 PARAMS = {
-    "initial_alpha": 0.2,  # 初始历史数据与预测值的加权系数
-    "window_size": 6,  # 滚动窗口大小（月）
-    "forecast_months": 3,  # 预测未来月数
-    "step_size": 1,  # 每次滚动的步长（月）
-    "last_year_period": ("2022-07", "2022-09"),  # 去年同期数据
-    "train_period": ("2023-01", "2023-06"),  # 训练数据期间
-}
-
-# 图表配置
-PLOT_CONFIG = {
-    "figure_size": (10, 6),
-    "font_family": "SimHei",
+    "initial_alpha": 0.2,
+    "window_size": 6,
+    "forecast_months": 3,
+    "step_size": 1,
+    "last_year_period": ("2022-07", "2022-09"),
+    "train_period": ("2023-01", "2023-06"),
 }
 
 data = pd.read_csv("附件1.csv", encoding="gbk")
@@ -33,7 +26,7 @@ def find_best_params(train_data, initial_params=None):
         initial_params = {
             "smoothing_level": [0.1, 0.3, 0.5, 0.7, 0.9],
             "smoothing_trend": [0.1, 0.3, 0.5, 0.7, 0.9],
-            "damping_trend": [0.8, 0.9, 0.98],  # 添加阻尼因子
+            "damping_trend": [0.8, 0.9, 0.98],
         }
 
     best_aic = float("inf")
@@ -122,39 +115,57 @@ for category, group in data.groupby("品类"):
     forecast_dates = pd.to_datetime(["2023-07-01", "2023-08-01", "2023-09-01"])
     adjusted_forecast_series = pd.Series(adjusted_forecast, index=forecast_dates)
 
+    # 对预测结果取整
+    adjusted_forecast_series = adjusted_forecast_series.round().astype(int)
+
+    # 将预测结果保存到字典中
     forecast_results[category] = adjusted_forecast_series
 
-    plt.rcParams["font.sans-serif"] = [PLOT_CONFIG["font_family"]]
-    plt.rcParams["axes.unicode_minus"] = False
+    # print(f"预测的 {category} 在2023年7-9月的库存量：")
+    # print(adjusted_forecast_series)
 
-    print(f"预测的 {category} 在2023年7-9月的库存量：")
-    print(adjusted_forecast_series)
+    # plt.figure(figsize=PLOT_CONFIG["figure_size"])
+    # plt.plot(train_data.index, train_data["库存量"], label="历史库存量")
 
-    plt.figure(figsize=PLOT_CONFIG["figure_size"])
-    plt.plot(train_data.index, train_data["库存量"], label="历史库存量")
+    # connection_dates = [train_data.index[-1], adjusted_forecast_series.index[0]]
+    # connection_values = [
+    #     train_data["库存量"].iloc[-1],
+    #     adjusted_forecast_series.values[0],
+    # ]
+    # plt.plot(connection_dates, connection_values, "k-", linewidth=1)
 
-    connection_dates = [train_data.index[-1], adjusted_forecast_series.index[0]]
-    connection_values = [
-        train_data["库存量"].iloc[-1],
-        adjusted_forecast_series.values[0],
-    ]
-    plt.plot(connection_dates, connection_values, "k-", linewidth=1)
+    # plt.plot(
+    #     adjusted_forecast_series.index,
+    #     adjusted_forecast_series.values,
+    #     label="预测库存量",
+    #     linestyle="--",
+    # )
+    # plt.plot(
+    #     last_year.index.shift(12, freq="MS"),
+    #     last_year["库存量"].values,
+    #     label="去年同期库存量",
+    #     linestyle=":",
+    #     color="gray",
+    # )
+    # plt.title(f"{category} 库存量预测")
+    # plt.xlabel("日期")
+    # plt.ylabel("库存量")
+    # plt.legend()
+    # plt.show()
 
-    plt.plot(
-        adjusted_forecast_series.index,
-        adjusted_forecast_series.values,
-        label="预测库存量",
-        linestyle="--",
-    )
-    plt.plot(
-        last_year.index.shift(12, freq="MS"),
-        last_year["库存量"].values,
-        label="去年同期库存量",
-        linestyle=":",
-        color="gray",
-    )
-    plt.title(f"{category} 库存量预测")
-    plt.xlabel("日期")
-    plt.ylabel("库存量")
-    plt.legend()
-    plt.show()
+# 将预测结果转换为DataFrame并重塑为长格式
+forecast_df = pd.DataFrame.from_dict(forecast_results, orient="index")
+forecast_df.columns = pd.to_datetime(["2023-07-01", "2023-08-01", "2023-09-01"])
+forecast_df = forecast_df.stack().reset_index()
+forecast_df.columns = ["品类", "月份", "库存量"]
+
+# 读取原始数据并合并预测数据
+original_data = pd.read_csv("附件1.csv", encoding="gbk")
+original_data["月份"] = pd.to_datetime(original_data["月份"])
+
+# 将预测数据和历史数据合并在一起
+merged_data = pd.concat([original_data, forecast_df]).sort_values(["品类", "月份"])
+
+# 保存结果
+merged_data.to_csv("月库存量预测结果.csv", encoding="gbk", index=False)
+print("预测结果已保存到 '月库存量预测结果.csv'")
