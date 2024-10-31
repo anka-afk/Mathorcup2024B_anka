@@ -1,16 +1,15 @@
 import pandas as pd
 import numpy as np
-import random
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from platypus import NSGAII, Problem, Integer, Solution
 
-# 数据准备（与前面代码一致）
+# 加载数据
 inventory_data = pd.read_csv("月库存量预测结果.csv", encoding="gbk")
 sales_data = pd.read_csv("预测结果_非负处理.csv", encoding="gbk")
 warehouse_data = pd.read_csv("附件3.csv", encoding="gbk")
 correlation_data = pd.read_csv("附件4.csv", encoding="gbk")
 category_info = pd.read_csv("附件5.csv", encoding="gbk")
 
+# 数据预处理
 inventory_max = (
     inventory_data.groupby("品类")["库存量"].max().reset_index(name="最大库存量")
 )
@@ -29,135 +28,102 @@ warehouse_capacity = warehouse_data.set_index("仓库")["仓容上限"].to_dict(
 warehouse_production = warehouse_data.set_index("仓库")["产能上限"].to_dict()
 correlation_matrix = correlation_data.set_index(["品类1", "品类2"])["关联度"].to_dict()
 
-# 遗传算法参数
-population_size = 100
-generations = 200
-mutation_rate = 0.01
+# 定义问题维度
+num_categories = len(categories)
+num_warehouses = len(warehouses)
 
 
-# 初始化种群
-def initialize_population():
-    population = []
-    for _ in range(population_size):
-        individual = {j: random.choice(warehouses) for j in categories}
-        population.append(individual)
-    return population
-
-
-# 改进适应度函数和选择策略
-def fitness(individual):
-    storage_utilizations = []
-    production_utilizations = []
-    total_cost, correlation_score = 0, 0
-
-    for i in warehouses:
-        # 计算仓库 i 的总库存和总销量
-        total_inventory = sum(
-            category_capacity.loc[category_capacity["品类"] == j, "最大库存量"].values[
-                0
-            ]
-            for j, w in individual.items()
-            if w == i
-        )
-        total_sales = sum(
-            category_capacity.loc[category_capacity["品类"] == j, "最大销量"].values[0]
-            for j, w in individual.items()
-            if w == i
-        )
-
-        # 仅对使用中的仓库计算利用率
-        if total_inventory > 0 and total_inventory <= warehouse_capacity[i]:
-            storage_utilizations.append(total_inventory / warehouse_capacity[i])
-
-        if total_sales > 0 and total_sales <= warehouse_production[i]:
-            production_utilizations.append(total_sales / warehouse_production[i])
-
-        # 累加租金成本
-        total_cost += sum(cost_dict[i] for j, w in individual.items() if w == i)
-
-        # 计算关联度得分
-        for j in categories:
-            for k in categories:
-                if j != k and individual[j] == i and individual[k] == i:
-                    correlation_score += correlation_matrix.get((j, k), 0)
-
-    min_storage_utilization = min(storage_utilizations) if storage_utilizations else 0
-    min_production_utilization = (
-        min(production_utilizations) if production_utilizations else 0
+# 定义目标函数
+def objective_function(vars):
+    # vars 包含每个品类的分配仓库
+    allocation = vars[:num_categories]
+    # 计算各优化目标
+    # 总仓租成本
+    total_rent_cost = sum(
+        cost_dict[warehouses[allocation[i]]] for i in range(num_categories)
     )
 
-    # 通过调整权重，更好地优化适应度
-    w1, w2, w3, w4 = 1, 1, 0.01, 10
-    return (
-        w1 * min_storage_utilization
-        + w2 * min_production_utilization
-        - w3 * total_cost
-        + w4 * correlation_score
+    # 最小仓容利用率（取最低值以确保平衡）
+    inventory_utilization = min(
+        sum(
+            category_capacity.set_index("品类").loc[categories[i], "最大库存量"]
+            for i in range(num_categories)
+            if allocation[i] == j
+        )
+        / warehouse_capacity[warehouses[j]]
+        for j in range(num_warehouses)
     )
 
+    # 最小产能利用率（同上）
+    production_utilization = min(
+        sum(
+            category_capacity.set_index("品类").loc[categories[i], "最大销量"]
+            for i in range(num_categories)
+            if allocation[i] == j
+        )
+        / warehouse_production[warehouses[j]]
+        for j in range(num_warehouses)
+    )
 
-# 改进的遗传算法流程
-def select(population):
-    sorted_population = sorted(population, key=fitness, reverse=True)
-    return sorted_population[:5] + random.choices(population, k=population_size - 5)
+    # 总关联度
+    total_correlation = sum(
+        correlation_matrix.get((categories[i], categories[k]), 0)
+        for i in range(num_categories)
+        for k in range(num_categories)
+        if allocation[i] == allocation[k]
+    )
 
-
-def crossover(parent1, parent2):
-    child = {}
-    for j in categories:
-        child[j] = parent1[j] if random.random() < 0.5 else parent2[j]
-    return child
-
-
-def mutate(individual):
-    for j in categories:
-        if random.random() < mutation_rate:
-            individual[j] = random.choice(warehouses)
-
-
-# 初始化绘图
-fig, ax = plt.subplots()
-ax.set_xlim(0, generations)
-ax.set_ylim(-1000, 1000)  # 根据实际适应度值范围调整
-ax.set_xlabel("Generation")
-ax.set_ylabel("Best Fitness Score")
-(line,) = ax.plot([], [], lw=2)
-best_fitness_scores = []
+    # 返回各目标值：分别为总仓租成本、负的最小仓容利用率、负的最小产能利用率、负的总关联度
+    return [
+        total_rent_cost,
+        -inventory_utilization,
+        -production_utilization,
+        -total_correlation,
+    ]
 
 
-# 更新函数，用于动画
-def update(frame):
-    global population
-    new_population = []
-    for _ in range(population_size):
-        parent1, parent2 = select(population)
-        child = crossover(parent1, parent2)
-        mutate(child)
-        new_population.append(child)
-    population = new_population
+# 定义优化问题
+problem = Problem(num_categories, 4)  # 4个目标
+problem.types[:] = [
+    Integer(0, num_warehouses - 1) for _ in range(num_categories)
+]  # 每个品类只能分配一个仓库
+problem.directions[:] = [
+    Problem.MINIMIZE,
+    Problem.MAXIMIZE,
+    Problem.MAXIMIZE,
+    Problem.MAXIMIZE,
+]
+problem.function = objective_function
 
-    # 记录当前代的最佳适应度值
-    best_individual = max(population, key=fitness)
-    best_fitness = fitness(best_individual)
-    best_fitness_scores.append(best_fitness)
+# 使用NSGA-II求解
+algorithm = NSGAII(problem)
+algorithm.run(10000)  # 设置迭代次数
 
-    # 更新绘图数据
-    line.set_data(range(len(best_fitness_scores)), best_fitness_scores)
-    ax.set_title(f"Generation {frame + 1}, Best Fitness: {best_fitness:.2f}")
-    return (line,)
+# 提取最优解并展示
+best_solutions = []
+for solution in algorithm.result:
+    allocation = solution.variables[:num_categories]
+    objectives = solution.objectives
+    best_solutions.append((allocation, objectives))
 
+# 打印最优解中的各优化目标值和分配方案
+for i, (allocation, objectives) in enumerate(best_solutions):
+    print(f"解 {i + 1}:")
+    print("仓租成本:", objectives[0])
+    print("最小仓容利用率:", -objectives[1])
+    print("最小产能利用率:", -objectives[2])
+    print("总品类关联度:", -objectives[3])
+    print("分配方案:", allocation)
+    print("-" * 50)
 
-# 动态显示
-population = initialize_population()
-ani = FuncAnimation(fig, update, frames=10, blit=True, repeat=False)
-plt.show()
-
-# 找到最优解并保存结果
-best_individual = max(population, key=fitness)
-result_df = pd.DataFrame(
-    [(category, warehouse) for category, warehouse in best_individual.items()],
-    columns=["品类", "仓库"],
+# 保存最优解为CSV
+solution_df = pd.DataFrame(
+    [
+        {"品类": categories[i], "仓库": warehouses[allocation[i]]}
+        for allocation, _ in best_solutions
+        for i in range(num_categories)
+    ]
 )
-result_df.to_csv("最终分配结果.csv", index=False, encoding="gbk")
+solution_df.to_csv("多目标优化分配方案.csv", index=False, encoding="gbk")
 
-print("最优分配方案已保存到 '最终分配结果.csv'")
+print("最优分配方案已保存到 '多目标优化分配方案.csv'")
