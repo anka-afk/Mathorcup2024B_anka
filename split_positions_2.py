@@ -44,7 +44,7 @@ def initialize_population():
     return population
 
 
-# 适应度函数
+# 改进适应度函数和选择策略
 def fitness(individual):
     storage_utilizations = []
     production_utilizations = []
@@ -81,14 +81,13 @@ def fitness(individual):
                 if j != k and individual[j] == i and individual[k] == i:
                     correlation_score += correlation_matrix.get((j, k), 0)
 
-    # 找到使用中的仓库的最小仓库利用率和最小产能利用率
     min_storage_utilization = min(storage_utilizations) if storage_utilizations else 0
     min_production_utilization = (
         min(production_utilizations) if production_utilizations else 0
     )
 
-    # 加权求和
-    w1, w2, w3, w4 = 1, 1, 1, 1
+    # 通过调整权重，更好地优化适应度
+    w1, w2, w3, w4 = 1, 1, 0.01, 10
     return (
         w1 * min_storage_utilization
         + w2 * min_production_utilization
@@ -97,9 +96,10 @@ def fitness(individual):
     )
 
 
-# 选择、交叉和变异
+# 改进的遗传算法流程
 def select(population):
-    return random.choices(population, weights=[fitness(ind) for ind in population], k=2)
+    sorted_population = sorted(population, key=fitness, reverse=True)
+    return sorted_population[:5] + random.choices(population, k=population_size - 5)
 
 
 def crossover(parent1, parent2):
@@ -149,8 +149,7 @@ def update(frame):
 
 # 动态显示
 population = initialize_population()
-ani = FuncAnimation(fig, update, frames=generations, blit=True, repeat=False)
-
+ani = FuncAnimation(fig, update, frames=10, blit=True, repeat=False)
 plt.show()
 
 # 找到最优解并保存结果
