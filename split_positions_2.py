@@ -35,11 +35,13 @@ correlation_matrix = correlation_data.pivot(
 ).fillna(0)
 
 # 初始化参数
-num_particles = 50  # 粒子数量
-num_iterations = 100  # 迭代次数
-w = 0.7  # 惯性权重
-c1 = 1.5  # 个体学习因子
-c2 = 1.5  # 社会学习因子
+num_particles = 100  # 增加粒子数量以提升解的多样性
+num_iterations = 200  # 增加迭代次数以细化搜索
+w = 0.5  # 调整惯性权重
+c1 = 2.0  # 增强个体学习因子
+c2 = 2.0  # 增强社会学习因子
+temperature = 100  # 模拟退火初始温度
+cooling_rate = 0.95  # 温度下降系数
 
 
 # 粒子类
@@ -60,11 +62,10 @@ class Particle:
         for cat1 in categories:
             for cat2 in categories:
                 if cat1 != cat2 and position[cat1] == position[cat2]:
-                    # 尝试从 correlation_matrix 直接获取 cat1, cat2 的关联度
                     try:
                         correlation = correlation_matrix.at[cat1, cat2]
                     except KeyError:
-                        correlation = 0  # 没有关联度时默认为 0
+                        correlation = 0
                     total_correlation += correlation
 
         return total_cost, -total_correlation  # 费用最小化，关联度最大化
@@ -73,21 +74,33 @@ class Particle:
         for cat in categories:
             r1 = random.random()
             r2 = random.random()
-            if random.random() < w:
-                self.velocity[cat] = c1 * r1 * (
-                    self.best_position[cat] != self.position[cat]
-                ) + c2 * r2 * (global_best_position[cat] != self.position[cat])
+            self.velocity[cat] = (
+                w * self.velocity[cat]
+                + c1 * r1 * (self.best_position[cat] != self.position[cat])
+                + c2 * r2 * (global_best_position[cat] != self.position[cat])
+            )
 
     def update_position(self):
         for cat in categories:
             if random.random() < self.velocity[cat]:
                 self.position[cat] = random.choice(warehouses)
 
+    def simulated_annealing(self, current_fitness):
+        # 模拟退火优化：尝试改变某些位置，并接受或拒绝新的位置
+        new_position = self.position.copy()
+        for cat in random.sample(categories, k=len(categories) // 10):
+            new_position[cat] = random.choice(warehouses)
+        new_fitness = self.evaluate(new_position)
+        delta_fitness = new_fitness[0] - current_fitness[0]
+        # 通过概率接受更差的解以跳出局部最优
+        if delta_fitness < 0 or random.random() < np.exp(-delta_fitness / temperature):
+            self.position = new_position
+            self.best_fitness = new_fitness
+
 
 # 初始化粒子群
 particles = [Particle() for _ in range(num_particles)]
 pareto_front = []
-
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -101,15 +114,16 @@ for iteration in range(num_iterations):
     print(f"Iteration {iteration + 1}/{num_iterations}")
     for particle in particles:
         if pareto_front:
-            global_best_position = min(pareto_front, key=lambda x: x[1])[
-                2
-            ]  # 获取 position 字典
+            global_best_position = min(pareto_front, key=lambda x: x[1])[2]
         else:
             global_best_position = particle.position
 
         # 更新粒子速度和位置
         particle.update_velocity(global_best_position)
         particle.update_position()
+
+        # 模拟退火优化
+        particle.simulated_annealing(particle.best_fitness)
 
         # 计算适应度并更新帕累托前沿
         fitness = particle.evaluate(particle.position)
@@ -134,6 +148,9 @@ for iteration in range(num_iterations):
     ax.set_title(f"Pareto Front at Iteration {iteration + 1}")
     plt.draw()
     plt.pause(0.01)
+
+    # 降低模拟退火的温度
+    temperature *= cooling_rate
 
 plt.ioff()
 plt.show()
