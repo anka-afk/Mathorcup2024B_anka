@@ -246,16 +246,19 @@ for category_name in categories[start_idx:]:
     )
 
     # 绘制结果
-    # plt.figure(figsize=(14, 7))
-    # plt.plot(category_sales_data.index, category_sales_data["y"], label="Actual")
-    # plt.plot(
-    #     forecast_combined["ds"], forecast_combined["yhat"], label="Forecast", color="orange"
-    # )
-    # plt.title(f"Sales Forecast vs Actual for {category_name}")
-    # plt.xlabel("Date")
-    # plt.ylabel("Sales")
-    # plt.legend()
-    # plt.show()
+    plt.figure(figsize=(14, 7))
+    plt.plot(category_sales_data.index, category_sales_data["y"], label="Actual")
+    plt.plot(
+        forecast_combined["ds"],
+        forecast_combined["yhat"],
+        label="Forecast",
+        color="orange",
+    )
+    plt.title(f"Sales Forecast vs Actual for {category_name}")
+    plt.xlabel("Date")
+    plt.ylabel("Sales")
+    plt.legend()
+    plt.show()
 
     predicted_row = [category_name] + forecast_combined["final_yhat"].tolist()
     with open("预测结果.csv", "a", newline="", encoding="utf-8-sig") as f:
