@@ -142,7 +142,6 @@ def sensitivity_analysis(base_solution):
     plt.show()
 
 
-# 然后是数据读取部分
 # 读取数据
 inventory_data = pd.read_csv("月库存量预测结果.csv", encoding="gbk")
 sales_data = pd.read_csv("预测结果_非负处理.csv", encoding="gbk")
@@ -374,7 +373,7 @@ class GreedyAllocator:
         return self.allocation
 
 
-# 添加PSO算法类
+# PSO算法类
 class PSOOptimizer:
     def __init__(
         self,
@@ -536,7 +535,7 @@ pso = PSOOptimizer(
     correlation_matrix=correlation_matrix,
 )
 
-best_solution, best_fitness = greedy_solution, greedy_fitness
+best_solution, best_fitness = pso.optimize(greedy_solution)
 print("PSO优化后目标值：", best_fitness)
 
 # 打印分配结果

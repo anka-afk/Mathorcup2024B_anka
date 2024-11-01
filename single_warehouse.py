@@ -104,7 +104,7 @@ def objective_function(allocation):
     )  # 值域[0,1]
 
     # 设置权重（现在所有指标都在[0,1]范围内）
-    w1, w2, w3, w4 = 1, 0.25, 0.25, 0.25  # 可以根据实际需求调整权重，但建议总和为1
+    w1, w2, w3, w4 = 1, 0.25, 0.25, 0.25  # 可以根据实际需求调整权重
 
     # 计算目标值（所有项都在相同尺度下）
     objective_value = (
@@ -360,7 +360,7 @@ class PSOOptimizer:
         return g_best, g_best_fitness
 
 
-# 主程序修改
+# 主程序
 # 1. 先用贪心算法获得初始解
 allocator = GreedyAllocator(
     categories=categories,
@@ -389,7 +389,7 @@ pso = PSOOptimizer(
     correlation_matrix=correlation_matrix,
 )
 
-best_solution, best_fitness = greedy_solution, greedy_fitness
+best_solution, best_fitness = pso.optimize(greedy_solution)
 print("PSO优化后目标值：", best_fitness)
 
 # 使用最终的最优解进行结果分析
@@ -401,7 +401,7 @@ for i, category in enumerate(categories):
 print("优化目标值：", best_fitness)
 
 
-# 在获得优化结果后，添加以下分析代码
+# 在获得优化结果后分析
 def analyze_results(allocation):
     # 初始化每个仓库的统计信息
     warehouse_stats = {
@@ -568,7 +568,6 @@ def sensitivity_analysis(base_solution):
     plt.show()
 
 
-# 在analyze_results函数调用后添加以下代码
 plot_warehouse_utilization(warehouse_stats)
 sensitivity_analysis(best_solution)
 

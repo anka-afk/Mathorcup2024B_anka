@@ -1,7 +1,7 @@
 import pandas as pd
 
 # 读取文件
-file_path = "预测结果.csv"  # 请确保文件路径正确
+file_path = "预测结果.csv"
 data = pd.read_csv(file_path, encoding="gbk", header=None)
 
 # 创建列名
