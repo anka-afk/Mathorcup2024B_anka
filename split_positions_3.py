@@ -536,7 +536,7 @@ pso = PSOOptimizer(
     correlation_matrix=correlation_matrix,
 )
 
-best_solution, best_fitness = pso.optimize(greedy_solution)
+best_solution, best_fitness = greedy_solution, greedy_fitness
 print("PSO优化后目标值：", best_fitness)
 
 # 打印分配结果
