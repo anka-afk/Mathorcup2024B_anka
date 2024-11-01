@@ -378,8 +378,8 @@ print("贪心算法目标值：", greedy_fitness)
 
 # 2. 用PSO进一步优化
 pso = PSOOptimizer(
-    n_particles=50,  # 粒子数量
-    n_iterations=100,  # 迭代次数
+    n_particles=500,  # 粒子数量
+    n_iterations=10000,  # 迭代次数
     categories=categories,
     warehouses=warehouses,
     category_capacity=category_capacity,
